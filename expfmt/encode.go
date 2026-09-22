@@ -36,7 +36,7 @@ func init() {
 		FmtProtoText,
 		FmtProtoCompact,
 		FmtOpenMetrics_1_0_0,
-		fmtOpenMetrics_2_0_0,
+		FmtOpenMetrics_2_0_0,
 		FmtOpenMetrics_0_0_1,
 	} {
 		if parsed := goautoneg.ParseAccept(string(f)); len(parsed) > 0 {
@@ -44,6 +44,41 @@ func init() {
 		}
 	}
 }
+
+var (
+	// DefaultAcceptedFormats contains the standard accepted formats for Negotiate,
+	// ordered by preference (delimited protobuf, protobuf text, compact protobuf text,
+	// and Prometheus text format).
+	DefaultAcceptedFormats = []Format{
+		FmtProtoDelim,
+		FmtProtoText,
+		FmtProtoCompact,
+		FmtText,
+	}
+
+	// DefaultOpenMetricsAcceptedFormats contains the standard accepted formats including
+	// OpenMetrics 1.0.0 and 0.0.1, ordered by preference.
+	DefaultOpenMetricsAcceptedFormats = []Format{
+		FmtOpenMetrics_1_0_0,
+		FmtOpenMetrics_0_0_1,
+		FmtProtoDelim,
+		FmtProtoText,
+		FmtProtoCompact,
+		FmtText,
+	}
+
+	// DefaultOpenMetrics2AcceptedFormats contains the accepted formats including
+	// OpenMetrics 2.0.0, 1.0.0, and 0.0.1, ordered by preference.
+	DefaultOpenMetrics2AcceptedFormats = []Format{
+		FmtOpenMetrics_2_0_0,
+		FmtOpenMetrics_1_0_0,
+		FmtOpenMetrics_0_0_1,
+		FmtProtoDelim,
+		FmtProtoText,
+		FmtProtoCompact,
+		FmtText,
+	}
+)
 
 // Encoder types encode metric families into an underlying wire protocol.
 type Encoder interface {
@@ -78,19 +113,19 @@ func (ec encoderCloser) Close() error {
 // appropriate accepted type is found, FmtText is returned (which is the
 // Prometheus text format).
 //
-// Deprecated: Use NegotiateAccept(h, FmtProtoDelim, FmtProtoText, FmtProtoCompact, FmtText)
+// Deprecated: Use NegotiateAccept(h, DefaultAcceptedFormats...)
 // or specify only the formats supported by your server.
 func Negotiate(h http.Header) Format {
-	return NegotiateAccept(h, FmtProtoDelim, FmtProtoText, FmtProtoCompact, FmtText)
+	return NegotiateAccept(h, DefaultAcceptedFormats...)
 }
 
 // NegotiateIncludingOpenMetrics works like Negotiate but includes
 // FmtOpenMetrics as an option for the result.
 //
-// Deprecated: Use NegotiateAccept(h, FmtOpenMetrics_1_0_0, FmtOpenMetrics_0_0_1, FmtProtoDelim, FmtProtoText, FmtProtoCompact, FmtText)
+// Deprecated: Use NegotiateAccept(h, DefaultOpenMetricsAcceptedFormats...)
 // or specify only the formats supported by your server.
 func NegotiateIncludingOpenMetrics(h http.Header) Format {
-	return NegotiateAccept(h, FmtOpenMetrics_1_0_0, FmtOpenMetrics_0_0_1, FmtProtoDelim, FmtProtoText, FmtProtoCompact, FmtText)
+	return NegotiateAccept(h, DefaultOpenMetricsAcceptedFormats...)
 }
 
 // NegotiateAccept returns the Content-Type based on the given Accept header

@@ -16,6 +16,7 @@ package expfmt
 
 import (
 	"errors"
+	"mime"
 	"strings"
 
 	"github.com/prometheus/common/model"
@@ -25,18 +26,13 @@ import (
 type Format string
 
 // Constants to assemble the Content-Type values for the different wire
-// protocols. The Content-Type strings here are all for the legacy exposition
-// formats, where valid characters for metric names and label names are limited.
-// Support for arbitrary UTF-8 characters in those names is already partially
-// implemented in this module (see model.ValidationScheme), but to actually use
-// it on the wire, new content-type strings will have to be agreed upon and
-// added here.
+// protocols.
 const (
 	TextVersion   = "0.0.4"
 	ProtoType     = `application/vnd.google.protobuf`
 	ProtoProtocol = `io.prometheus.client.MetricFamily`
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeProtoCompact) instead.
-	ProtoFmt        = ProtoType + "; proto=" + ProtoProtocol + ";"
+	ProtoFmt      = ProtoType + "; proto=" + ProtoProtocol + ";"
+
 	OpenMetricsType = `application/openmetrics-text`
 	//nolint:revive // Allow for underscores.
 	OpenMetricsVersion_0_0_1 = "0.0.1"
@@ -45,25 +41,23 @@ const (
 	//nolint:revive // Allow for underscores.
 	OpenMetricsVersion_2_0_0 = "2.0.0"
 
-	// The Content-Type values for the different wire protocols. Do not do direct
-	// comparisons to these constants, instead use the comparison functions.
-	//
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeUnknown) instead.
+	// The Content-Type values for the different wire protocols. These represent
+	// baseline Content-Types used for HTTP headers and content negotiation.
+	// Because Content-Types on the wire may include dynamic parameters
+	// (such as "; escaping=...") or whitespace variations, avoid comparing Format
+	// values using direct equality (==). Instead, use the Matches method, e.g.
+	// format.Matches(expfmt.FmtText).
 	FmtUnknown Format = `<unknown>`
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeTextPlain) instead.
-	FmtText Format = `text/plain; version=` + TextVersion + `; charset=utf-8`
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeProtoDelim) instead.
-	FmtProtoDelim Format = ProtoFmt + ` encoding=delimited`
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeProtoText) instead.
-	FmtProtoText Format = ProtoFmt + ` encoding=text`
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeProtoCompact) instead.
+	FmtText    Format = `text/plain; version=` + TextVersion + `; charset=utf-8`
+
+	FmtProtoDelim   Format = ProtoFmt + ` encoding=delimited`
+	FmtProtoText    Format = ProtoFmt + ` encoding=text`
 	FmtProtoCompact Format = ProtoFmt + ` encoding=compact-text`
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeOpenMetrics) instead.
+
 	//nolint:revive // Allow for underscores.
 	FmtOpenMetrics_1_0_0 Format = OpenMetricsType + `; version=` + OpenMetricsVersion_1_0_0 + `; charset=utf-8`
 	//nolint:revive // Allow for underscores.
-	fmtOpenMetrics_2_0_0 Format = OpenMetricsType + `; version=` + OpenMetricsVersion_2_0_0 + `; charset=utf-8`
-	// Deprecated: Use expfmt.NewFormat(expfmt.TypeOpenMetrics) instead.
+	FmtOpenMetrics_2_0_0 Format = OpenMetricsType + `; version=` + OpenMetricsVersion_2_0_0 + `; charset=utf-8`
 	//nolint:revive // Allow for underscores.
 	FmtOpenMetrics_0_0_1 Format = OpenMetricsType + `; version=` + OpenMetricsVersion_0_0_1 + `; charset=utf-8`
 )
@@ -123,9 +117,47 @@ func NewOpenMetricsFormat(version string) (Format, error) {
 	}
 	if version == OpenMetricsVersion_2_0_0 {
 		// OpenMetrics 2.0.0 is experimental and encode-only.
-		return fmtOpenMetrics_2_0_0, nil
+		return FmtOpenMetrics_2_0_0, nil
 	}
 	return FmtUnknown, errors.New("unknown open metrics version string")
+}
+
+// Version returns the format version parameter (e.g. "0.0.4", "1.0.0", "2.0.0"),
+// or an empty string if unspecified or invalid.
+func (f Format) Version() string {
+	_, params, err := mime.ParseMediaType(string(f))
+	if err != nil {
+		return ""
+	}
+	return params["version"]
+}
+
+// Matches reports whether format f matches the target Format.
+// The comparison matches the media type and essential parameters (such as
+// version, proto, and encoding) while ignoring dynamic parameters like
+// escaping scheme ("; escaping=...") or formatting/whitespace differences.
+func (f Format) Matches(target Format) bool {
+	if f == target {
+		return true
+	}
+	mediaType1, params1, err1 := mime.ParseMediaType(string(f))
+	mediaType2, params2, err2 := mime.ParseMediaType(string(target))
+	if err1 != nil || err2 != nil {
+		return f == target
+	}
+	if mediaType1 != mediaType2 {
+		return false
+	}
+	if params1["version"] != params2["version"] {
+		return false
+	}
+	if params1["encoding"] != params2["encoding"] {
+		return false
+	}
+	if params1["proto"] != params2["proto"] {
+		return false
+	}
+	return true
 }
 
 // WithEscapingScheme returns a copy of Format with the specified escaping
